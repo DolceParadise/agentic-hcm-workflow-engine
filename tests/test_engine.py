@@ -1,8 +1,8 @@
 from conftest import FakeLLM
 
-from hcm_engine.engine import WorkflowEngine
-from hcm_engine.llm import LLMResponse
-from hcm_engine.tools import MockHRTools
+from engine import WorkflowEngine
+from llm import LLMResponse
+from tools import MockHRTools
 
 
 def make_engine(settings, fake_index, state_store):
@@ -22,7 +22,7 @@ def test_policy_agent_is_grounded_and_traced(settings, fake_index, state_store):
     assert "[policy-005]" in result.response
     assert result.citations
     assert [step.name for step in result.trace] == [
-        "orchestrator",
+        "supervisor_agent",
         "policy_retrieval",
         "grounded_policy_answer",
     ]
@@ -32,9 +32,7 @@ def test_policy_agent_is_grounded_and_traced(settings, fake_index, state_store):
 
 def test_multi_turn_leave_application_persists_slots(settings, fake_index, state_store):
     engine = make_engine(settings, fake_index, state_store)
-    first = engine.run(
-        "Apply for annual leave starting 2026-07-06", "leave-session"
-    )
+    first = engine.run("Apply for annual leave starting 2026-07-06", "leave-session")
     assert "end date" in first.response
 
     second = engine.run("It ends 2026-07-08", "leave-session")
@@ -57,9 +55,7 @@ class NullContentLLM(FakeLLM):
         )
 
 
-def test_null_slot_extraction_falls_back_gracefully(
-    settings, fake_index, state_store
-):
+def test_null_slot_extraction_falls_back_gracefully(settings, fake_index, state_store):
     engine = WorkflowEngine(
         settings,
         llm=NullContentLLM(),
@@ -68,12 +64,8 @@ def test_null_slot_extraction_falls_back_gracefully(
         tools=MockHRTools(),
     )
 
-    result = engine.run(
-        "Apply for annual leave starting 2026-07-06", "null-content-session"
-    )
+    result = engine.run("Apply for annual leave starting 2026-07-06", "null-content-session")
 
     assert "end date" in result.response
-    extraction = next(
-        step for step in result.trace if step.name == "leave_slot_extraction"
-    )
+    extraction = next(step for step in result.trace if step.name == "leave_slot_extraction")
     assert extraction.status == "error"

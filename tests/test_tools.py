@@ -1,6 +1,6 @@
 import pytest
 
-from hcm_engine.tools import MockHRTools, ToolError, call_with_retry, definitions_as_dicts
+from tools import MockHRTools, ToolError, call_with_retry, definitions_as_dicts
 
 
 def test_tool_schemas_are_structured():
@@ -40,4 +40,3 @@ def test_transient_failure_is_retried():
 
     assert call_with_retry(flaky, {}, delay_seconds=0) == {"status": "ok"}
     assert attempts == 2
-

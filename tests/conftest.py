@@ -3,10 +3,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from hcm_engine.config import Settings
-from hcm_engine.llm import LLMResponse
-from hcm_engine.rag import PolicyIndex
-from hcm_engine.state import SQLiteStateStore
+from config import Settings
+from llm import LLMResponse
+from rag import PolicyIndex
+from state import SQLiteStateStore
 
 
 class FakeEmbedder:
@@ -63,4 +63,3 @@ def fake_index(settings):
 @pytest.fixture
 def state_store(settings):
     return SQLiteStateStore(settings.db_path)
-

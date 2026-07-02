@@ -1,4 +1,4 @@
-from hcm_engine.rag import chunk_policy
+from rag import chunk_policy
 
 
 def test_policy_is_chunked_by_heading(settings):
@@ -12,4 +12,3 @@ def test_retrieval_returns_relevant_section(fake_index):
     results = fake_index.search("How do I report harassment?", top_k=3)
     assert results[0].chunk.heading == "Harassment and Discrimination"
     assert results[0].score > 0.5
-

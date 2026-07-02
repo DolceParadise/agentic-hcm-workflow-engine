@@ -29,7 +29,7 @@ hcm-agent = "cli:main"
 [tool.setuptools]
 package-dir = {"" = "src"}
 py-modules = [
-  "app", "cli", "config", "engine", "evaluation", "learning", "llm", "memory", "models",
+  "cli", "config", "engine", "evaluation", "learning", "llm", "memory", "models",
   "rag", "state", "tools", "tracing", "workflow"
 ]
 packages = ["agents"]

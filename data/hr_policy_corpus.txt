@@ -1,0 +1,71 @@
+### Overview
+This handbook defines the minimum global controls for leave, payroll, attendance, conduct, learning, and employee-data operations. Local law and a more protective employment term take precedence. Employees should use the HR portal and quote their employee ID when raising a case.
+
+### Scope and Responsibilities
+The rules apply to employees, contingent workers, managers, HR Operations, payroll administrators, and approved service providers. Managers validate business facts; HR interprets policy; payroll owns pay calculations; Compliance has final authority over legal and regulatory controls.
+
+### Speak-Up and Non-Retaliation
+Employees may report a concern to their manager, HR, Compliance, or the confidential ethics channel. Good-faith reporting and participation in an investigation must not result in retaliation. Suspected retaliation must be escalated immediately.
+
+### Equal Opportunity
+Employment decisions must be based on role requirements, documented performance, skills, and lawful business needs. Discrimination based on a legally protected characteristic is prohibited. Reasonable workplace accommodations are assessed through HR.
+
+### Harassment and Discrimination
+Harassment, sexual harassment, bullying, and discriminatory conduct are prohibited in the workplace, during work travel, at company events, and on work communication systems. Employees can report concerns to HR, any manager, Compliance, or the confidential helpline. Managers who receive a report must promptly escalate it and must not investigate informally.
+
+### Annual Leave
+Annual leave is recorded in working days and requires manager approval before travel is committed. The portal balance is the system of record. More than 15 leave days in a quarter is a review signal, not proof of abuse; the manager and HR must consider approved extended leave and local entitlements.
+
+### Sick and Emergency Leave
+Employees should notify their manager as soon as reasonably possible and record the absence in the portal. Medical information is restricted to authorized HR personnel. Documentation may be requested only where local law and the applicable country schedule permit it.
+
+### Attendance and Time Recording
+Employees must record time and attendance accurately by the published cutoff. Managers review exceptions weekly. Missing punches may be corrected using source evidence; repeated or disputed corrections require employee confirmation and an audit trail.
+
+### Overtime
+Overtime must be approved in advance and accurately recorded. A workflow cycle must not exceed 48 overtime hours unless local law expressly permits it and HR has documented an exception. The system must never erase recorded hours to resolve a cap breach.
+
+### Payroll Accuracy
+Payroll uses approved salary, attendance, benefits, tax, and deduction inputs. Employees should report discrepancies through a payroll case. Payroll corrections must retain the original record, calculation evidence, approver, effective date, and reason.
+
+### Payroll Adjustments
+No agent or employee may autonomously change base salary, bank details, tax treatment, or a finalized payroll result. Proposed corrections require payroll or HR approval. An uncontested clerical input may be corrected only through an approved, reversible tool with an idempotency key.
+
+### Payslips and Deductions
+Payslips are confidential and available only to the employee and authorized payroll staff. Each deduction must have a lawful or employee-authorized basis. An unexplained deduction is escalated to Payroll Operations before the next cutoff.
+
+### Mandatory Learning
+Employees must complete assigned compliance training by its due date. An overdue assignment is a compliance incident and is escalated to the employee and manager; regulated-role training is also escalated to Compliance. Completion records may not be manually fabricated.
+
+### Performance Reviews
+Performance ratings must be supported by documented outcomes and calibrated consistently. Protected leave, accommodation, or good-faith reporting must not adversely affect a rating. Employees may request a review through HR.
+
+### Conflicts of Interest
+Employees must disclose outside employment, close personal relationships in reporting lines, material vendor interests, and other circumstances that could impair independent judgment. Compliance determines mitigation and maintains the disclosure record.
+
+### Gifts, Bribery, and Corruption
+Bribes, kickbacks, facilitation payments, and improper advantages are prohibited. Gifts and hospitality must be modest, lawful, infrequent, and recorded when required. Cash or cash equivalents must not be offered or accepted.
+
+### Confidential Information
+Employee, customer, payroll, health, and company information may be accessed only for an authorized business purpose. Data must be shared through approved systems and limited to the minimum necessary recipients.
+
+### Employee Data and Privacy
+HR data must be accurate, purpose-limited, access-controlled, and retained according to the records schedule. Automated monitoring must log its input, reasoning, confidence, and outcome. Sensitive attributes must not be used to infer misconduct.
+
+### Automated Decisions and Human Review
+High-risk payroll, employment, disciplinary, legal, or compliance decisions require a named human approver. Low-confidence anomalies are queued for review. A compliance veto is final for automation and cannot be overridden by model confidence or learned behavior.
+
+### Incident Management
+Each incident receives a unique identifier, evidence snapshot, risk rating, proposed action, owner, and status. Related prior incidents may inform a proposal, but historical feedback must not override current policy or law.
+
+### Audit and Record Retention
+Workflow transitions, retrieval evidence, tool inputs, approvals, vetoes, and human feedback are retained in the audit store. Corrections must be idempotent and reversible where technically possible. Access to audit data is monitored.
+
+### Policy Exceptions
+Exceptions require a documented business reason, expiry date, risk assessment, and approval from the accountable HR or Compliance owner. The absence of a response is not approval. Emergency action must be reviewed after the event.
+
+### Escalation Matrix
+Managers handle ordinary attendance and leave reviews. HR handles employment terms, repeated leave patterns, and performance disputes. Payroll handles pay calculations and deductions. Compliance handles legal controls, mandatory training, retaliation, bribery, privacy, and overtime-cap violations.
+
+### Contact and Review Cycle
+Employees can open an HR portal case for routine support and use the ethics channel for confidential concerns. Policy owners review this handbook annually and after material legal, operational, or system changes. The version displayed in the policy repository is authoritative.

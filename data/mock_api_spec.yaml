@@ -1,0 +1,49 @@
+openapi: 3.1.0
+info:
+  title: Darwinbox Mock Upstream Alerts API
+  version: 1.0.0
+paths:
+  /v1/alerts:
+    post:
+      summary: Submit a payroll or attendance alert to the supervisor graph
+      operationId: submitAlert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Alert'
+      responses:
+        '202':
+          description: Alert accepted and assigned a workflow run ID
+components:
+  schemas:
+    Alert:
+      type: object
+      additionalProperties: false
+      required: [event_id, source, occurred_at, anomaly]
+      properties:
+        event_id: {type: string}
+        source: {type: string, enum: [payroll-engine, attendance-system]}
+        occurred_at: {type: string, format: date-time}
+        anomaly:
+          type: object
+          additionalProperties: false
+          required:
+            - anomaly_id
+            - employee_id
+            - category
+            - description
+            - confidence
+            - recommended_action
+          properties:
+            anomaly_id: {type: string}
+            employee_id: {type: string}
+            category: {type: string, enum: [payroll, leave, compliance]}
+            description: {type: string}
+            confidence: {type: number, minimum: 0, maximum: 1}
+            recommended_action:
+              type: string
+              enum: [auto-correct, escalate-to-manager, escalate-to-HR, flag-for-audit, no-action]
+            evidence: {type: object, additionalProperties: true}
+            risk: {type: string, enum: [low, medium, high], default: medium}

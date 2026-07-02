@@ -1,0 +1,126 @@
+{
+  "version": "1.0",
+  "rules": [
+    {
+      "id": "PAY-001",
+      "name": "Payroll corrections require approval",
+      "conditions": [
+        { "field": "category", "op": "eq", "value": "payroll" },
+        { "field": "action", "op": "eq", "value": "auto-correct" }
+      ],
+      "veto": "Payroll corrections require Payroll or HR approval."
+    },
+    {
+      "id": "CMP-001",
+      "name": "Compliance incidents require HR",
+      "conditions": [
+        { "field": "category", "op": "eq", "value": "compliance" },
+        { "field": "action", "op": "ne", "value": "escalate-to-HR" }
+      ],
+      "veto": "Compliance incidents must be escalated to HR."
+    },
+    {
+      "id": "RSK-001",
+      "name": "High-risk automation forbidden",
+      "conditions": [
+        { "field": "risk", "op": "eq", "value": "high" },
+        { "field": "action", "op": "eq", "value": "auto-correct" }
+      ],
+      "veto": "High-risk changes cannot be automated."
+    },
+    {
+      "id": "OT-001",
+      "name": "Weekly overtime cap",
+      "conditions": [
+        { "field": "evidence.overtime_hours", "op": "gt", "value": 48 },
+        { "field": "action", "op": "ne", "value": "escalate-to-HR" }
+      ],
+      "veto": "Overtime above 48 hours requires HR escalation."
+    },
+    {
+      "id": "TRN-001",
+      "name": "Mandatory training escalation",
+      "conditions": [
+        {
+          "field": "evidence.rule",
+          "op": "eq",
+          "value": "mandatory_training_required"
+        },
+        { "field": "action", "op": "ne", "value": "escalate-to-HR" }
+      ],
+      "veto": "Missing mandatory training requires HR escalation."
+    },
+    {
+      "id": "LEV-001",
+      "name": "Minimum leave notice",
+      "conditions": [
+        { "field": "evidence.notice_days", "op": "lt", "value": 2 },
+        { "field": "action", "op": "eq", "value": "auto-correct" }
+      ],
+      "veto": "Planned leave with under two days' notice cannot be auto-approved."
+    },
+    {
+      "id": "PRB-001",
+      "name": "Probation leave constraint",
+      "conditions": [
+        { "field": "evidence.probation", "op": "eq", "value": true },
+        { "field": "evidence.leave_days", "op": "gt", "value": 5 },
+        { "field": "action", "op": "eq", "value": "auto-correct" }
+      ],
+      "veto": "Extended leave during probation requires HR review."
+    },
+    {
+      "id": "BNK-001",
+      "name": "Bank detail dual approval",
+      "conditions": [
+        {
+          "field": "evidence.change_type",
+          "op": "eq",
+          "value": "bank_details"
+        },
+        { "field": "evidence.dual_approval", "op": "ne", "value": true }
+      ],
+      "veto": "Bank-detail changes require dual approval."
+    },
+    {
+      "id": "PAY-002",
+      "name": "Material correction approval tier",
+      "conditions": [
+        { "field": "evidence.correction_amount", "op": "gt", "value": 500 },
+        {
+          "field": "evidence.approval_tier",
+          "op": "not_in",
+          "value": ["payroll-manager", "hr-director"]
+        }
+      ],
+      "veto": "Payroll corrections above 500 require manager-tier approval."
+    },
+    {
+      "id": "TER-001",
+      "name": "Termination human decision",
+      "conditions": [
+        { "field": "evidence.change_type", "op": "eq", "value": "termination" },
+        { "field": "action", "op": "eq", "value": "auto-correct" }
+      ],
+      "veto": "Termination decisions must never be automated."
+    },
+    {
+      "id": "MED-001",
+      "name": "Medical data restriction",
+      "conditions": [
+        { "field": "evidence.data_class", "op": "eq", "value": "medical" },
+        { "field": "evidence.authorized_hr", "op": "ne", "value": true }
+      ],
+      "veto": "Medical data may only be handled by authorized HR staff."
+    },
+    {
+      "id": "RET-001",
+      "name": "Retroactive payroll window",
+      "conditions": [
+        { "field": "evidence.retroactive_days", "op": "gt", "value": 90 },
+        { "field": "action", "op": "eq", "value": "auto-correct" }
+      ],
+      "veto": "Corrections older than 90 days require formal payroll review."
+    }
+  ]
+}

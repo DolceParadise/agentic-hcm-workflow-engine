@@ -51,7 +51,7 @@ class WorkflowEngine:
         )
         self.state_store = state_store or SQLiteStateStore(self.settings.db_path)
         self.tools = tools or MockHRTools()
-        self.supervisor_agent = SupervisorAgent()
+        self.supervisor_agent = SupervisorAgent(self.llm)
         self.policy_agent = PolicyAgent(
             self.index,
             self.llm,
@@ -93,9 +93,12 @@ class WorkflowEngine:
             "agent",
             {"message": message, "pending_intent": session_state.pending_intent},
         ) as span:
-            intent = self.supervisor_agent.route(message, session_state)
-            span["output"] = {"intent": intent, "strategy": "deterministic_rule_first"}
-        return {"intent": intent}
+            decision = self.supervisor_agent.route(message, session_state, trace)
+            span["output"] = {
+                "intent": decision.intent,
+                "strategy": decision.strategy,
+            }
+        return {"intent": decision.intent}
 
     def _policy_agent_node(self, graph_state: ConversationGraphState) -> dict:
         response, citations = self.policy_agent.run(graph_state["message"], graph_state["trace"])

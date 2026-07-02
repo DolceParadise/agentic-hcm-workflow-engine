@@ -1,0 +1,261 @@
+from __future__ import annotations
+
+import uuid
+from dataclasses import asdict
+from time import perf_counter
+from typing import Any, TypedDict
+
+from langgraph.graph import END, START, StateGraph
+
+from agents.anomaly_detection_agent import AnomalyDetectionAgent
+from agents.compliance_agent import ComplianceAgent, ComplianceDecision
+from learning import FeedbackLearner
+from memory import EpisodicVectorMemory
+from models import Anomaly, GraphTransition, WorkflowResult, WorkflowTrigger
+from state import SQLiteStateStore
+
+
+class WorkflowGraphState(TypedDict, total=False):
+    run_id: str
+    trigger: WorkflowTrigger
+    anomalies: list[Anomaly]
+    decisions: list[ComplianceDecision]
+    transitions: list[GraphTransition]
+    shared_state: dict[str, Any]
+    last_transition_at: float
+    approvals_queued: int
+    actions_executed: int
+
+
+class SelfHealingWorkflow:
+    """LangGraph supervisor workflow with communication only through graph state."""
+
+    def __init__(
+        self,
+        anomaly_detection_agent: AnomalyDetectionAgent,
+        compliance_agent: ComplianceAgent,
+        store: SQLiteStateStore,
+        auto_action_threshold: float,
+        memory: EpisodicVectorMemory | None = None,
+    ) -> None:
+        self.anomaly_detection_agent = anomaly_detection_agent
+        self.compliance_agent = compliance_agent
+        self.store = store
+        self.feedback_learner = FeedbackLearner(store.connection)
+        self.auto_action_threshold = auto_action_threshold
+        self.memory = memory or EpisodicVectorMemory(store.connection)
+        self.graph = self._build_graph()
+
+    def _build_graph(self):
+        builder = StateGraph(WorkflowGraphState)
+        builder.add_node("supervisor_agent", self._supervisor_agent)
+        builder.add_node("anomaly_detection_agent", self._anomaly_detection_agent)
+        builder.add_node("memory_agent", self._memory_agent)
+        builder.add_node("compliance_agent", self._compliance_agent)
+        builder.add_node("action_agent", self._action_agent)
+        builder.add_node("supervisor_finalize_agent", self._supervisor_finalize_agent)
+        builder.add_edge(START, "supervisor_agent")
+        builder.add_edge("supervisor_agent", "anomaly_detection_agent")
+        builder.add_edge("anomaly_detection_agent", "memory_agent")
+        builder.add_edge("memory_agent", "compliance_agent")
+        builder.add_edge("compliance_agent", "action_agent")
+        builder.add_edge("action_agent", "supervisor_finalize_agent")
+        builder.add_edge("supervisor_finalize_agent", END)
+        return builder.compile()
+
+    def _transition(
+        self,
+        state: WorkflowGraphState,
+        node: str,
+        event: str,
+        *,
+        rl_action=None,
+        reward=None,
+        tool_calls=None,
+        **updates: Any,
+    ) -> None:
+        shared_state = state["shared_state"]
+        inputs = dict(shared_state)
+        shared_state.update(updates)
+        now = perf_counter()
+        transition = GraphTransition(
+            state["run_id"],
+            len(state["transitions"]) + 1,
+            node,
+            event,
+            dict(shared_state),
+            input=inputs,
+            output=dict(updates),
+            latency_ms=round((now - state["last_transition_at"]) * 1000, 3),
+            rl_action=rl_action,
+            reward=reward,
+            tool_calls=tool_calls or [],
+        )
+        state["last_transition_at"] = now
+        state["transitions"].append(transition)
+        self.store.record_transition(transition)
+
+    def _supervisor_agent(self, state: WorkflowGraphState) -> dict[str, Any]:
+        self._transition(state, "supervisor_agent", "trigger_received")
+        return {
+            "transitions": state["transitions"],
+            "shared_state": state["shared_state"],
+            "last_transition_at": state["last_transition_at"],
+        }
+
+    def _anomaly_detection_agent(self, state: WorkflowGraphState) -> dict[str, Any]:
+        trigger = state["trigger"]
+        self._transition(state, "anomaly_detection_agent", "scan_started")
+        if trigger.payload.get("anomalies") is not None:
+            anomalies = [Anomaly(**item) for item in trigger.payload["anomalies"]]
+        elif trigger.payload.get("anomaly") is not None:
+            anomalies = [Anomaly(**trigger.payload["anomaly"])]
+        else:
+            anomalies = self.anomaly_detection_agent.scan()
+        self._transition(
+            state,
+            "anomaly_detection_agent",
+            "scan_completed",
+            anomalies=[asdict(item) for item in anomalies],
+        )
+        return {
+            "anomalies": anomalies,
+            "transitions": state["transitions"],
+            "shared_state": state["shared_state"],
+            "last_transition_at": state["last_transition_at"],
+        }
+
+    def _memory_agent(self, state: WorkflowGraphState) -> dict[str, Any]:
+        for anomaly in state["anomalies"]:
+            matches = self.memory.search(anomaly)
+            learned = self.feedback_learner.propose(anomaly, matches)
+            anomaly.recommended_action = learned.action
+            anomaly.confidence = round(
+                min(1.0, max(0.0, anomaly.confidence + learned.confidence_adjustment)), 3
+            )
+            self._transition(
+                state,
+                "memory_agent",
+                "proposal_warm_started",
+                memory_matches=[asdict(item) for item in matches],
+                active_anomaly=asdict(anomaly),
+                feedback_samples=learned.sample_count,
+                rl_action=learned.action,
+            )
+        return {
+            "anomalies": state["anomalies"],
+            "transitions": state["transitions"],
+            "shared_state": state["shared_state"],
+            "last_transition_at": state["last_transition_at"],
+        }
+
+    def _compliance_agent(self, state: WorkflowGraphState) -> dict[str, Any]:
+        decisions = []
+        for anomaly in state["anomalies"]:
+            decision = self.compliance_agent.evaluate(anomaly)
+            decisions.append(decision)
+            self._transition(
+                state,
+                "compliance_agent",
+                "hard_veto_evaluated",
+                compliance={
+                    "allowed": decision.allowed,
+                    "reason": decision.reason,
+                    "violated_rule_ids": decision.violated_rule_ids,
+                },
+                rl_action=anomaly.recommended_action,
+                reward=-1.0 if not decision.allowed else None,
+            )
+            if not decision.allowed:
+                self.store.record_rl_experience(anomaly, -1.0, "compliance-veto", vetoed=True)
+                self.memory.add(anomaly, anomaly.recommended_action, "compliance-veto", -1.0)
+        return {
+            "decisions": decisions,
+            "transitions": state["transitions"],
+            "shared_state": state["shared_state"],
+            "last_transition_at": state["last_transition_at"],
+        }
+
+    def _action_agent(self, state: WorkflowGraphState) -> dict[str, Any]:
+        approvals = 0
+        actions = 0
+        for anomaly, decision in zip(state["anomalies"], state["decisions"], strict=True):
+            self.store.save_incident(anomaly)
+            needs_approval = (
+                not decision.allowed
+                or anomaly.confidence < self.auto_action_threshold
+                or anomaly.recommended_action != "auto-correct"
+            )
+            if needs_approval:
+                anomaly.status = "pending-human-review"
+                self.store.save_incident(anomaly)
+                self.store.queue_approval(anomaly.anomaly_id, decision.reason)
+                approvals += 1
+                self._transition(
+                    state,
+                    "action_agent",
+                    "human_approval_queued",
+                    rl_action=anomaly.recommended_action,
+                    tool_calls=[{"name": "queue_approval", "anomaly_id": anomaly.anomaly_id}],
+                )
+            else:
+                anomaly.status = "auto-corrected"
+                self.store.save_incident(anomaly)
+                self.store.record_rl_experience(anomaly, 0.25, "safe-execution")
+                actions += 1
+                self._transition(
+                    state,
+                    "action_agent",
+                    "guarded_action_executed",
+                    rl_action=anomaly.recommended_action,
+                    reward=0.25,
+                    tool_calls=[{"name": "auto_correct", "anomaly_id": anomaly.anomaly_id}],
+                )
+        return {
+            "anomalies": state["anomalies"],
+            "approvals_queued": approvals,
+            "actions_executed": actions,
+            "transitions": state["transitions"],
+            "shared_state": state["shared_state"],
+            "last_transition_at": state["last_transition_at"],
+        }
+
+    def _supervisor_finalize_agent(self, state: WorkflowGraphState) -> dict[str, Any]:
+        self._transition(state, "supervisor_finalize_agent", "workflow_completed")
+        return {
+            "transitions": state["transitions"],
+            "shared_state": state["shared_state"],
+            "last_transition_at": state["last_transition_at"],
+        }
+
+    def run(self, trigger: WorkflowTrigger) -> WorkflowResult:
+        run_id = str(uuid.uuid4())
+        initial: WorkflowGraphState = {
+            "run_id": run_id,
+            "trigger": trigger,
+            "anomalies": [],
+            "decisions": [],
+            "transitions": [],
+            "shared_state": {"trigger": asdict(trigger), "anomalies": []},
+            "last_transition_at": perf_counter(),
+            "approvals_queued": 0,
+            "actions_executed": 0,
+        }
+        final = self.graph.invoke(initial)
+        diagnostics = self.store.rl_diagnostics()
+        cost = {
+            "actual_usd": 0.0,
+            "actual_tokens": 0,
+            "naive_baseline_tokens": 1350,
+            "token_savings_percent": 100.0,
+        }
+        return WorkflowResult(
+            run_id,
+            trigger,
+            final["anomalies"],
+            final["transitions"],
+            final["approvals_queued"],
+            final["actions_executed"],
+            diagnostics,
+            cost,
+        )

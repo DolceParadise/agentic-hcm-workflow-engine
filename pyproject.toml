@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
   "numpy>=1.26,<3",
+  "langgraph>=1.2,<2",
   "pypdf>=5.0,<6",
   "python-dotenv>=1.0,<2",
   "sentence-transformers>=4.1,<6",
@@ -23,10 +24,15 @@ dev = [
 ]
 
 [project.scripts]
-hcm-agent = "hcm_engine.cli:main"
+hcm-agent = "cli:main"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = [
+  "app", "cli", "config", "engine", "evaluation", "learning", "llm", "memory", "models",
+  "rag", "state", "tools", "tracing", "workflow"
+]
+packages = ["agents"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -38,4 +44,3 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
-

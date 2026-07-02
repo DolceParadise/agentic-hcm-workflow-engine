@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
 
-from hcm_engine.models import TraceStep
+from models import TraceStep
 
 
 @dataclass
@@ -14,9 +14,7 @@ class TraceCollector:
     steps: list[TraceStep] = field(default_factory=list)
 
     @contextmanager
-    def span(
-        self, name: str, kind: str, inputs: dict[str, Any]
-    ) -> Iterator[dict[str, Any]]:
+    def span(self, name: str, kind: str, inputs: dict[str, Any]) -> Iterator[dict[str, Any]]:
         started = time.perf_counter()
         result: dict[str, Any] = {}
         status = "ok"

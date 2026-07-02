@@ -15,12 +15,15 @@ class Settings:
     db_path: Path = Path(".runtime/hcm.db")
     index_path: Path = Path(".runtime/policy_index.npz")
     policy_path: Path = Path("data/hr_policy_corpus.txt")
+    employee_data_path: Path = Path("data/tech_company_employee_data_1000_with_leave.csv")
+    compliance_rules_path: Path = Path("data/compliance_rules.json")
     retrieval_top_k: int = 4
     retrieval_threshold: float = 0.28
+    auto_action_threshold: float = 0.90
 
     @classmethod
     def from_env(cls, project_root: Path | None = None) -> Settings:
-        root = project_root or Path(__file__).resolve().parents[2]
+        root = project_root or Path(__file__).resolve().parents[1]
 
         def rooted(name: str, default: str) -> Path:
             value = Path(os.getenv(name, default))
@@ -35,5 +38,10 @@ class Settings:
             db_path=rooted("HCM_DB_PATH", ".runtime/hcm.db"),
             index_path=rooted("HCM_INDEX_PATH", ".runtime/policy_index.npz"),
             policy_path=rooted("HCM_POLICY_PATH", "data/hr_policy_corpus.txt"),
+            employee_data_path=rooted(
+                "HCM_EMPLOYEE_DATA_PATH",
+                "data/tech_company_employee_data_1000_with_leave.csv",
+            ),
+            compliance_rules_path=rooted("HCM_COMPLIANCE_RULES_PATH", "data/compliance_rules.json"),
+            auto_action_threshold=float(os.getenv("HCM_AUTO_ACTION_THRESHOLD", "0.90")),
         )
-

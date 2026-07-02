@@ -5,7 +5,7 @@ import json
 
 from dotenv import load_dotenv
 
-from hcm_engine.engine import WorkflowEngine
+from engine import WorkflowEngine
 
 
 def main() -> None:
@@ -21,4 +21,3 @@ def main() -> None:
     if args.trace:
         print(json.dumps([step.to_dict() for step in result.trace], indent=2))
         print(json.dumps({"tokens": result.token_usage, "cost": result.cost}, indent=2))
-

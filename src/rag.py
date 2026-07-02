@@ -7,7 +7,7 @@ from typing import Protocol
 
 import numpy as np
 
-from hcm_engine.models import PolicyChunk, SearchResult
+from models import PolicyChunk, SearchResult
 
 
 class Embedder(Protocol):

@@ -1,16 +1,24 @@
 # Agentic HCM Workflow Engine
 
-A reusable, traceable multi-agent engine for conversational HR operations. It routes requests
-to a grounded policy RAG agent or an action agent backed by structured mock HR tools, while
-persisting context across turns.
+A reusable, traceable self-healing HR operations engine. It supports conversational,
+scheduled, and upstream-system triggers and persists every graph transition, incident,
+approval, and feedback outcome.
 
 ## What is included
 
-- **Orchestrator agent:** deterministic, rule-first routing for policy, leave, and payslip intents.
+- **`supervisor_agent`:** deterministic, rule-first routing for policy, leave, and payslip intents.
 - **Policy agent:** section-aware retrieval with `Qwen/Qwen3-Embedding-8B`, cosine similarity,
   relevance gating, and citation-constrained generation.
 - **Action agent:** leave balance, leave application, and payslip tools with JSON schemas,
   validation, retry handling, and meaningful errors.
+- **Anomaly agent:** robust peer-cohort payroll scoring, leave-limit review signals, mandatory
+  training checks, and overtime-cap checks.
+- **Compliance agent:** deterministic hard vetoes that model confidence and feedback cannot
+  override.
+- **HITL and learning:** SQLite approval queue plus a conservative contextual bandit that uses
+  reward-weighted human outcomes and compliance penalties to adjust proposals.
+- **Episodic vector memory:** dependency-free SQLite vector store using stable feature-hashed
+  embeddings; stores incident context, action, outcome, and reward and retrieves similar cases.
 - **Conversation memory:** SQLite-backed messages, pending intent, and collected slots.
 - **Observability:** per-step agent/retrieval/LLM/tool trace with input, output, status, latency,
   tokens, reported OpenRouter cost, and an optimization comparison.
@@ -22,20 +30,17 @@ All LLM inference uses OpenRouter's free `openai/gpt-oss-120b:free` model. All e
 ## Architecture
 
 ```text
-User
+Reactive / Scheduled / System trigger
   |
   v
-Orchestrator (rule-first, no LLM)
-  |-------------------------------|
-  v                               v
-Policy Agent                  Action Agent
-  |                               |
-Qwen embedding retrieval      Structured mock tools
-  |                               |
-gpt-oss grounded answer       balance / leave / payslip
-  |-------------------------------|
+LangGraph `supervisor_agent` + shared graph state
+  |-- `policy_agent` (RAG)
+  |-- `anomaly_detection_agent` (scan and score)
+  |-- `memory_agent` (episodic retrieval + RL warm start)
+  |-- `compliance_agent` (hard veto)
+  `-- `action_agent` (guarded execution / HITL queue)
                   |
-           SQLite state + trace
+      SQLite transitions + incidents + feedback
 ```
 
 The policy corpus is split at Markdown section headings. Oversized sections are windowed at
@@ -59,7 +64,7 @@ cp .env.example .env
 Set `OPENROUTER_API_KEY` in `.env`, then run:
 
 ```bash
-streamlit run app.py
+streamlit run src/app.py
 ```
 
 Open the URL printed by Streamlit, normally `http://localhost:8501`.
@@ -73,6 +78,53 @@ hcm-agent "Apply for annual leave from 2026-07-06 to 2026-07-08" \
 ```
 
 Use the same `--session-id` on later commands to continue a conversation.
+
+Programmatic trigger usage:
+
+```python
+engine = WorkflowEngine()
+scheduled = engine.run_scheduled_scan()
+system = engine.process_trigger("system", upstream_alert_payload, source="payroll-engine")
+engine.record_feedback(anomaly_id, "approved")
+```
+
+The upstream payload contract is documented in `data/mock_api_spec.yaml`; the 12 hard-veto
+rules live in `data/compliance_rules.json`, never in a prompt.
+
+## Anomaly scoring and action policy
+
+- Payroll compares salary within department and five-year experience bands. A robust modified
+  z-score of 2.5 starts an audit-only signal; confidence rises from 0.72 with extremity.
+- Leave over 15 days in the supplied review period starts at 0.65 confidence and increases
+  with excess days. It is explicitly a review signal, not a misconduct finding.
+- Missing mandatory training scores 0.99. Overtime above the 48-hour cycle cap starts at 0.88.
+- The auto-action threshold is 0.90 (`HCM_AUTO_ACTION_THRESHOLD`). Anything below it enters
+  HITL. Payroll changes, compliance incidents, high-risk changes, and non-correction proposals
+  always enter HITL regardless of confidence.
+
+Compliance vetoes receive reward `-1.0`, rejected proposals `-1.0`, modified proposals `+0.5`,
+approved proposals `+1.0`, and safe automated execution `+0.25`. Positive, semantically similar
+episodes can raise recurrence confidence by up to 0.12; negative/vetoed episodes suppress the
+same proposal. Compliance is evaluated after learning, so no learned policy can bypass a veto.
+
+## Evaluation and Loom diagnostics
+
+Run the 15-case evaluation harness (happy paths, edge cases, adversarial input, memory, and RL):
+
+```bash
+PYTHONPATH=src python -m evaluation
+```
+
+It prints pass/fail plus reasoning for every case. The full pytest suite currently contains 20
+tests. The Streamlit proactive-scan panel plots cumulative reward and action distribution and
+shows the per-run token baseline. Deterministic scans use zero LLM tokens versus the explicit
+naive baseline of three 450-token calls (1,350 tokens), a 100% reduction; conversational RAG
+runs continue reporting measured provider tokens and cost.
+
+For the recurrence walkthrough, submit a low-confidence `auto-correct` leave anomaly, approve
+it with `engine.record_feedback(...)`, then submit the semantically identical anomaly under a
+new ID. The first queues for HITL at 0.85; the second retrieves the approved episode, rises above
+0.90, and resolves without another approval. This behavior is covered by the `warm-start` case.
 
 ## Example conversations
 
@@ -93,7 +145,7 @@ configured threshold, the agent refuses to guess and directs the employee to HR.
 
 ## Tool contracts
 
-Tool definitions live in `src/hcm_engine/tools.py` as OpenAI-style JSON schemas. Tool calls and
+Tool definitions live in `src/tools.py` as OpenAI-style JSON schemas. Tool calls and
 results are recorded in the trace. Transient `TimeoutError` and `ConnectionError` failures are
 retried; validation and business errors are returned as actionable messages without retrying.
 
@@ -146,17 +198,23 @@ business errors, transient retries, policy traces, no-LLM routing, and multi-tur
 ## Project structure
 
 ```text
-app.py                     Streamlit UI
 data/                      Supplied PDF and normalized policy corpus
-src/hcm_engine/
-  agents.py                Orchestrator, policy, and action agents
+src/
+  app.py                   Streamlit UI
+  agents/
+    supervisor_agent.py      Trigger routing agent
+    policy_agent.py          Grounded RAG agent
+    action_agent.py          Guarded HR action agent
+    anomaly_detection_agent.py  Workforce anomaly detection agent
+    compliance_agent.py      File-backed hard-veto agent
   config.py                Environment-backed settings
-  engine.py                Public workflow facade
+  engine.py                Public facade + conversational LangGraph
   llm.py                   OpenRouter client
   rag.py                   Chunking, Qwen embeddings, persisted vector index
   state.py                 SQLite conversation state
   tools.py                 Mock APIs and JSON schemas
   tracing.py               Per-step observability
+  workflow.py              Self-healing LangGraph
 tests/                     Offline deterministic test suite
 ```
 

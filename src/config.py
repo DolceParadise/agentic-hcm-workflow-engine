@@ -13,7 +13,7 @@ class Settings:
     embedding_model: str = "Qwen/Qwen3-Embedding-8B"
     employee_id: str = "E001"
     db_path: Path = Path(".runtime/hcm.db")
-    index_path: Path = Path(".runtime/policy_index.npz")
+    index_path: Path = Path("data/policy_index.npz")
     policy_path: Path = Path("data/hr_policy_corpus.txt")
     employee_data_path: Path = Path("data/tech_company_employee_data_1000_with_leave.csv")
     compliance_rules_path: Path = Path("data/compliance_rules.json")
@@ -36,7 +36,7 @@ class Settings:
             embedding_model=os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B"),
             employee_id=os.getenv("HCM_EMPLOYEE_ID", "E001"),
             db_path=rooted("HCM_DB_PATH", ".runtime/hcm.db"),
-            index_path=rooted("HCM_INDEX_PATH", ".runtime/policy_index.npz"),
+            index_path=rooted("HCM_INDEX_PATH", "data/policy_index.npz"),
             policy_path=rooted("HCM_POLICY_PATH", "data/hr_policy_corpus.txt"),
             employee_data_path=rooted(
                 "HCM_EMPLOYEE_DATA_PATH",

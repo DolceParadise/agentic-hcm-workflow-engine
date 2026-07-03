@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Darwinbox Mock Upstream Alerts API
+  title: Mock Upstream Alerts API
   version: 1.0.0
 paths:
   /v1/alerts:

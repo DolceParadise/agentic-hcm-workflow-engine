@@ -177,6 +177,13 @@ class SQLiteStateStore:
                 (anomaly_id, reason),
             )
 
+    def supersede_pending_approvals(self) -> None:
+        """Close the active queue before a new full-workforce scan."""
+        with self._connect() as connection:
+            connection.execute(
+                "UPDATE approvals SET status = 'superseded' WHERE status = 'pending'"
+            )
+
     def record_feedback(
         self,
         anomaly_id: str,

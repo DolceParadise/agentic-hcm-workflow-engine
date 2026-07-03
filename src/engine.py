@@ -125,6 +125,7 @@ class WorkflowEngine:
         return self.self_healing.run(trigger)
 
     def run_scheduled_scan(self) -> WorkflowResult:
+        self.state_store.supersede_pending_approvals()
         return self.process_trigger("scheduled", source="scheduler")
 
     def record_feedback(

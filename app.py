@@ -1,56 +1,57 @@
+# ruff: noqa: E501
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
 import uuid
+from dataclasses import asdict
 
 import streamlit as st
 from dotenv import load_dotenv
 
 from engine import WorkflowEngine
-from evaluation import CASES
 
 load_dotenv()
-st.set_page_config(page_title="Self-Healing HR Ops Platform", page_icon="🧭", layout="wide")
+st.set_page_config(page_title="Self-Healing HR Ops", page_icon="✦", layout="wide")
 
 st.markdown(
     """
     <style>
-        .stApp {
-            background:
-                radial-gradient(circle at top left, rgba(41, 98, 255, 0.18), transparent 30%),
-                radial-gradient(circle at top right, rgba(255, 122, 24, 0.14), transparent 26%),
-                linear-gradient(180deg, #09111f 0%, #0d1526 42%, #f5f7fb 42%, #f5f7fb 100%);
-        }
-        .hero-card {
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.92));
-            color: white;
-            border-radius: 24px;
-            padding: 24px 26px;
-            border: 1px solid rgba(255,255,255,0.08);
-            box-shadow: 0 24px 60px rgba(2, 6, 23, 0.28);
-        }
-        .glass-card {
-            background: rgba(255, 255, 255, 0.82);
-            backdrop-filter: blur(16px);
-            border: 1px solid rgba(148, 163, 184, 0.22);
-            border-radius: 20px;
-            padding: 18px 20px;
-            box-shadow: 0 18px 35px rgba(15, 23, 42, 0.08);
-        }
-        .badge {
-            display: inline-block;
-            padding: 0.28rem 0.65rem;
-            border-radius: 999px;
-            font-size: 0.77rem;
-            font-weight: 700;
-            letter-spacing: 0.04em;
-            text-transform: uppercase;
-            background: rgba(59, 130, 246, 0.12);
-            color: #1d4ed8;
-        }
-        .muted { color: #64748b; }
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
+    :root { --ink:#16261f; --muted:#64736c; --green:#176b4d; --mint:#dff4e8; --paper:#f6f5ef; --line:#dfe4dc; --amber:#e3a72f; }
+    .stApp { background: var(--paper); color: var(--ink); font-family:'DM Sans',sans-serif; }
+    h1,h2,h3 { font-family:'Manrope',sans-serif !important; letter-spacing:-.035em; }
+    [data-testid="stSidebar"] { background:#10271e; border-right:0; }
+    [data-testid="stSidebar"] * { color:#eef8f1; }
+    [data-testid="stSidebar"] .stButton button { background:#f4fff7; color:#123d2c !important; border:1px solid #b9efca; font-weight:700; }
+    [data-testid="stSidebar"] .stButton button * { color:#123d2c !important; }
+    [data-testid="stSidebar"] .stButton button:hover { background:#b9efca; border-color:#b9efca; }
+    [data-testid="stSidebar"] .stButton button[kind="primary"] { background:#b9efca; color:#10271e !important; border:1px solid #b9efca; }
+    .stButton button, .stFormSubmitButton button { background:#176b4d; color:#fff; border:1px solid #176b4d; font-weight:700; }
+    .stButton button:hover, .stFormSubmitButton button:hover { background:#0f5038; color:#fff; border-color:#0f5038; }
+    [data-testid="stMetric"] { background:#fff; border:1px solid var(--line); padding:15px 17px; border-radius:14px; box-shadow:0 4px 18px rgba(24,46,36,.04); }
+    [data-testid="stMetricLabel"] { color:var(--muted); }
+    [data-testid="stMetricValue"] { font-family:'Manrope',sans-serif; color:var(--ink); }
+    .hero { background:#173d2e; color:white; border-radius:22px; padding:30px 34px; margin:6px 0 20px; position:relative; overflow:hidden; }
+    .hero:after { content:'✦'; position:absolute; right:34px; top:5px; font-size:130px; color:rgba(185,239,202,.12); }
+    .eyebrow { color:#9fe1b7; font-size:.72rem; font-weight:700; letter-spacing:.14em; text-transform:uppercase; }
+    .hero h1 { color:white; margin:.4rem 0 .45rem; font-size:2.35rem; }
+    .hero p { color:#cfe1d7; max-width:72ch; margin:0; font-size:1rem; }
+    .section-kicker { color:var(--green); font-size:.72rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; margin-bottom:.1rem; }
+    .agent-strip { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin:12px 0 22px; }
+    .agent-node { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px; font-size:.82rem; }
+    .agent-node b { display:block; color:var(--green); margin-bottom:2px; }
+    .callout { background:#eef7f1; border-left:4px solid #3b9a6c; padding:14px 16px; border-radius:0 12px 12px 0; margin:12px 0; }
+    .signal { display:inline-block; padding:4px 9px; background:#e6f2ea; color:#176b4d; border-radius:99px; font-size:.72rem; font-weight:700; }
+    div[data-baseweb="tab-list"] { gap:8px; border-bottom:1px solid var(--line); }
+    button[data-baseweb="tab"] { background:#e5ece7 !important; color:#29483b !important; border-radius:10px 10px 0 0; padding:10px 18px !important; opacity:1 !important; }
+    button[data-baseweb="tab"] p { color:#29483b !important; font-weight:700 !important; }
+    button[data-baseweb="tab"][aria-selected="true"] { background:#176b4d !important; color:#fff !important; }
+    button[data-baseweb="tab"][aria-selected="true"] p { color:#fff !important; }
+    button[data-baseweb="tab"]:hover { background:#cfe2d6 !important; }
+    button[data-baseweb="tab"][aria-selected="true"]:hover { background:#176b4d !important; }
+    [data-testid="stRadio"] > label p { color:#16261f !important; font-weight:700 !important; }
+    [data-testid="stRadio"] [role="radiogroup"] label { background:#fff; border:1px solid #b7c6bd; border-radius:10px; padding:8px 14px; margin-right:8px; }
+    [data-testid="stRadio"] [role="radiogroup"] label p { color:#16261f !important; font-weight:700 !important; }
+    .stDataFrame { border:1px solid var(--line); border-radius:12px; overflow:hidden; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -62,343 +63,241 @@ def get_engine() -> WorkflowEngine:
     return WorkflowEngine()
 
 
-def _default_learning_anomaly() -> dict[str, object]:
+def demo_anomaly(*, veto: bool = False) -> dict[str, object]:
+    if veto:
+        return {
+            "anomaly_id": str(uuid.uuid4()), "employee_id": "EMP-042", "category": "payroll",
+            "description": "AED 800 payroll correction requested without manager-tier approval",
+            "confidence": 0.97, "recommended_action": "auto-correct", "risk": "high",
+            "evidence": {"correction_amount": 800, "approval_tier": "analyst", "retroactive_days": 12},
+        }
     return {
-        "anomaly_id": str(uuid.uuid4()),
-        "employee_id": "E-DEMO",
-        "category": "leave",
-        "description": "Repeated Q1 leave threshold anomaly",
-        "confidence": 0.84,
-        "recommended_action": "auto-correct",
+        "anomaly_id": str(uuid.uuid4()), "employee_id": "EMP-218", "category": "leave",
+        "description": "Repeated Q1 leave threshold anomaly", "confidence": 0.84,
+        "recommended_action": "auto-correct", "risk": "low",
         "evidence": {"leave_days": 18, "review_threshold": 15, "policy_refs": ["Annual Leave"]},
-        "risk": "low",
     }
 
 
-def _render_trace(result) -> None:
-    cols = st.columns(3)
-    cols[0].metric("LLM calls", result.token_usage.get("llm_calls", 0))
-    cols[1].metric("Token saving", f"{result.cost.get('token_savings_percent', 0)}%")
-    cols[2].metric("Trace steps", len(result.trace))
-    st.caption(
-        f"Tokens: {result.token_usage.get('total', 0)} | Reported cost: ${result.cost.get('actual_usd', 0.0):.6f}"
-    )
+def anomaly_rows(result) -> list[dict]:
+    rows = []
+    for anomaly in result.anomalies:
+        evidence = anomaly.evidence
+        current_payroll = evidence.get("salary") if anomaly.category == "payroll" else None
+        mean_payroll = evidence.get("cohort_mean") if anomaly.category == "payroll" else None
+        leave_days = evidence.get("leave_days") if anomaly.category == "leave" else None
+        rows.append(
+            {
+                "Employee": anomaly.employee_id,
+                "Signal": anomaly.category.title(),
+                "Existing payroll": f"${current_payroll:,.0f}" if current_payroll else "—",
+                "Mean payroll": f"${mean_payroll:,.0f}" if mean_payroll else "—",
+                "Leave days": f"{leave_days:g}" if leave_days is not None else "—",
+                "Confidence": f"{anomaly.confidence:.0%}",
+                "Recommended action": anomaly.recommended_action,
+                "Status": anomaly.status,
+                "Finding": anomaly.description,
+            }
+        )
+    return rows
+
+
+def render_workflow(result) -> None:
+    st.markdown("#### Processing history")
+    for transition in result.transitions:
+        reward = "" if transition.reward is None else f" · reward {transition.reward:+.2f}"
+        with st.expander(f"Step {transition.sequence:02d} — {transition.event.replace('_', ' ').title()}{reward}"):
+            st.json({
+                "latency_ms": transition.latency_ms, "rl_action": transition.rl_action,
+                "tool_calls": transition.tool_calls, "output": transition.output,
+            })
+
+
+def render_request_trace(result) -> None:
+    a, b, c, d = st.columns(4)
+    a.metric("Request type", result.intent.replace("_", " ").title())
+    b.metric("AI calls", result.token_usage.get("llm_calls", 0))
+    c.metric("Processing saved", f"{result.cost.get('token_savings_percent', 0):.0f}%")
+    d.metric("Processing steps", len(result.trace))
     for step in result.trace:
-        icon = {"agent": "A", "retrieval": "R", "llm": "L", "tool": "T"}.get(step.kind, "S")
-        with st.expander(f"{icon} {step.name} · {step.latency_ms:.0f} ms", expanded=False):
-            st.json(
-                {
-                    "kind": step.kind,
-                    "status": step.status,
-                    "input": step.input,
-                    "output": step.output,
-                    "tokens": {"input": step.input_tokens, "output": step.output_tokens},
-                    "cost_usd": step.cost_usd,
-                }
-            )
+        with st.expander(f"{step.name.replace('_', ' ').title()} · {step.latency_ms:.0f} ms"):
+            st.json(step.to_dict())
 
 
-if "session_id" not in st.session_state:
-    st.session_state.session_id = str(uuid.uuid4())
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "last_result" not in st.session_state:
-    st.session_state.last_result = None
-if "scan_result" not in st.session_state:
-    st.session_state.scan_result = None
-if "learning_result" not in st.session_state:
-    st.session_state.learning_result = None
-if "evaluation_report" not in st.session_state:
-    st.session_state.evaluation_report = None
+defaults = {
+    "session_id": str(uuid.uuid4()), "messages": [], "last_result": None,
+    "scan_result": None, "system_result": None, "learning_result": None,
+    "request_text": "",
+}
+for key, value in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
 
 engine = get_engine()
 
-if st.sidebar.button("Run proactive workforce scan", type="primary", use_container_width=True):
-    with st.spinner("Scanning workforce data..."):
-        st.session_state.scan_result = engine.run_scheduled_scan()
-if st.sidebar.button("Run RL learning demo", use_container_width=True):
-    with st.spinner("Running two feedback cycles..."):
+st.sidebar.markdown("## ✦ HR OPS")
+st.sidebar.caption("Self-healing workforce operations")
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Quick actions**")
+if st.sidebar.button("Simulate a payroll alert", width="stretch"):
+    with st.spinner("Routing payroll-engine alert…"):
+        st.session_state.system_result = engine.process_trigger(
+            "system", {"anomaly": demo_anomaly(veto=True)}, source="payroll-engine"
+        )
+if st.sidebar.button("Run two-cycle learning demo", width="stretch"):
+    with st.spinner("Applying feedback and replaying incident…"):
         st.session_state.learning_result = engine.simulate_learning_cycle(
-            _default_learning_anomaly(),
-            feedback_decision="approved",
-            outcome="resolved",
+            demo_anomaly(), feedback_decision="approved", outcome="resolved"
         )
-if st.sidebar.button("Run evaluation harness", use_container_width=True):
-    with st.spinner("Executing the 15-case evaluation harness..."):
-        completed = subprocess.run(
-            [sys.executable, "-m", "evaluation"],
-            cwd=str(engine.settings.project_root / "src"),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if completed.returncode == 0:
-            st.session_state.evaluation_report = json.loads(completed.stdout)
-        else:
-            st.session_state.evaluation_report = {
-                "error": completed.stderr.strip() or completed.stdout.strip(),
-            }
-if st.sidebar.button("New conversation", use_container_width=True):
-    st.session_state.session_id = str(uuid.uuid4())
-    st.session_state.messages = []
-    st.session_state.last_result = None
-    st.rerun()
+st.sidebar.markdown("---")
 
-pending_approvals = engine.pending_approvals()
+pending = engine.pending_approvals()
 diagnostics = engine.rl_diagnostics()
-recent_incidents = engine.recent_incidents()
-recent_experiences = engine.recent_experiences()
+incidents = engine.recent_incidents()
+experiences = engine.recent_experiences()
 
-st.markdown(
-    """
-    <div class="hero-card">
-        <span class="badge">Self-healing HR ops</span>
-        <h1 style="margin: 0.55rem 0 0.3rem 0; font-size: 2.25rem;">Self-Healing HR Ops Platform</h1>
-        <p style="margin: 0; max-width: 72ch; color: rgba(226, 232, 240, 0.88);">
-            Reactive requests, scheduled scans, and upstream alerts all flow through the same graph:
-            grounded policy retrieval, compliance vetoes, human approvals, episodic memory, and a
-            persisted RL layer that changes future proposals after feedback.
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<div class="hero"><h1>Self-Healing HR Operations</h1></div>
+""", unsafe_allow_html=True)
 
-overview_cols = st.columns(5)
-overview_cols[0].metric("Pending approvals", len(pending_approvals))
-overview_cols[1].metric("Incidents stored", len(recent_incidents))
-overview_cols[2].metric("RL experiences", len(recent_experiences))
-overview_cols[3].metric("Compliance vetoes", diagnostics.get("veto_count", 0))
-overview_cols[4].metric("Policy cases", len(CASES))
+m1, m2, m3, m4, m5 = st.columns(5)
+m1.metric("Workforce", "1,000")
+m2.metric("Open reviews", len(pending))
+m3.metric("Incidents learned", len(incidents))
+m4.metric("Policy rewards", len(experiences))
+m5.metric("Hard vetoes", diagnostics.get("veto_count", 0))
 
-tabs = st.tabs(["Overview", "Reactive", "Proactive", "Learning Lab", "Observability"])
+tabs = st.tabs(["Ask HR", "Detection", "Review queue", "Learning"])
 
 with tabs[0]:
-    left, right = st.columns([1.1, 0.9])
-    with left:
-        st.markdown("### How the graph behaves")
-        st.markdown(
-            """
-            - Reactive chat routes to policy or action specialists through the supervisor.
-            - Scheduled scans and system alerts share one workflow state and one persistence layer.
-            - Compliance rules are hard vetoes before any action is executed.
-            - Human decisions and outcome feedback are stored as RL rewards and persist across restarts.
-            """
-        )
-        st.info(
-            f"Database: `{engine.settings.db_path}` | Policy index: `{engine.settings.index_path}` | "
-            f"Auto-action threshold: `{engine.settings.auto_action_threshold:.2f}`"
-        )
-    with right:
-        st.markdown("### Evaluation harness")
-        st.dataframe(
-            [
-                {"case": case.name, "test": case.test, "reasoning": case.reasoning}
-                for case in CASES
-            ],
-            use_container_width=True,
-            hide_index=True,
-        )
-        if st.session_state.evaluation_report:
-            report = st.session_state.evaluation_report
-            if "error" in report:
-                st.error(report["error"])
-            else:
-                st.success(f"{report['passed']}/{report['total']} cases passed")
+    st.markdown("### Ask a grounded HR question")
+    with st.form("request_form"):
+        prompt = st.text_area("Request", key="request_text", height=90)
+        submitted = st.form_submit_button("Submit request", type="primary")
+    if submitted and prompt.strip():
+        with st.spinner("Retrieving policy and selecting a safe action…"):
+            result = engine.run(prompt, st.session_state.session_id)
+        st.session_state.last_result = result
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state.messages.append({"role": "assistant", "content": result.response})
+    if st.session_state.last_result:
+        result = st.session_state.last_result
+        st.markdown("#### Agent response")
+        st.success(result.response)
+        if result.citations:
+            st.markdown("#### Grounding evidence")
+            for hit in result.citations:
+                with st.expander(f"{hit.chunk.heading} · {hit.chunk.chunk_id} · similarity {hit.score:.3f}"):
+                    st.write(hit.chunk.text)
+        render_request_trace(result)
 
 with tabs[1]:
-    st.markdown("### Reactive requests")
-    st.caption("Ask a policy question or request an HR action. The response is grounded and traced.")
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("Ask a policy question or request an HR action"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-        with st.chat_message("assistant"):
-            with st.spinner("Working..."):
-                result = engine.run(prompt, st.session_state.session_id)
-            st.markdown(result.response)
-            if result.citations:
-                with st.expander("Retrieved policy evidence"):
-                    for item in result.citations:
-                        st.markdown(
-                            f"**{item.chunk.heading}** · `{item.chunk.chunk_id}` · score `{item.score:.3f}`"
-                        )
-                        st.write(item.chunk.text)
-        st.session_state.messages.append({"role": "assistant", "content": result.response})
-        st.session_state.last_result = result
+    st.markdown("### Proactive anomaly detection")
+    if st.button("Run workforce scan", type="primary", width="stretch"):
+        with st.spinner("Scanning 1,000 workforce records…"):
+            st.session_state.scan_result = engine.run_scheduled_scan()
         st.rerun()
-
-    result = st.session_state.last_result
+    result = st.session_state.scan_result
     if result:
-        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        _render_trace(result)
-        st.markdown("</div>", unsafe_allow_html=True)
+        a, b, c, d = st.columns(4)
+        a.metric("Signals detected", len(result.anomalies))
+        b.metric("Auto-executed", result.actions_executed)
+        c.metric("Human review", result.approvals_queued)
+        d.metric("Processing saved", f"{result.cost['token_savings_percent']:.0f}%")
+        category = st.segmented_control("Signal type", ["All", "Payroll", "Leave", "Compliance"], default="All")
+        rows = anomaly_rows(result)
+        if category != "All":
+            rows = [row for row in rows if row["Signal"] == category]
+        st.dataframe(rows, width="stretch", hide_index=True, height=360)
+        with st.expander("View processing details"):
+            render_workflow(result)
+    else:
+        st.info("Select **Run workforce scan** to check the 1,000-record employee dataset.")
+    if st.session_state.system_result:
+        st.markdown("### Latest upstream alert")
+        system_result = st.session_state.system_result
+        alert = system_result.anomalies[0]
+        st.error(f"{alert.description} — {alert.status}")
+        st.json(asdict(alert))
+        render_workflow(system_result)
 
 with tabs[2]:
-    st.markdown("### Proactive scans")
-    scan_result = st.session_state.scan_result
-    if scan_result:
-        top_cols = st.columns(4)
-        top_cols[0].metric("Detected", len(scan_result.anomalies))
-        top_cols[1].metric("Pending approval", scan_result.approvals_queued)
-        top_cols[2].metric("Auto-executed", scan_result.actions_executed)
-        top_cols[3].metric("Transitions", len(scan_result.transitions))
-        st.caption(
-            f"Token optimization: {scan_result.cost['actual_tokens']} actual vs {scan_result.cost['naive_baseline_tokens']} naive "
-            f"({scan_result.cost['token_savings_percent']:.1f}% reduction)"
-        )
-        if scan_result.diagnostics.get("cumulative_reward"):
-            chart_cols = st.columns(2)
-            with chart_cols[0]:
-                st.markdown("**Cumulative RL reward**")
-                st.line_chart(scan_result.diagnostics["cumulative_reward"])
-            with chart_cols[1]:
-                st.markdown("**Action distribution**")
-                st.bar_chart(scan_result.diagnostics["action_distribution"])
-
-        filtered_category = st.selectbox(
-            "Filter anomalies by category",
-            ["all", "payroll", "leave", "compliance"],
-            index=0,
-            key="scan_category_filter",
-        )
-        anomalies = [
-            anomaly
-            for anomaly in scan_result.anomalies
-            if filtered_category == "all" or anomaly.category == filtered_category
-        ]
-        for anomaly in anomalies[:30]:
-            st.markdown(
-                f"**{anomaly.category.title()} · {anomaly.employee_id}**  \n"
-                f"{anomaly.description}  \n"
-                f"Confidence `{anomaly.confidence:.3f}` · Proposal `{anomaly.recommended_action}` · Status `{anomaly.status}`"
+    st.markdown("### Review queue")
+    pending = engine.pending_approvals()
+    if pending:
+        selected = st.selectbox("Select a case", pending, format_func=lambda x: f"{x['anomaly_id'][:8]} · {x['reason']}")
+        matching = next((item for item in engine.recent_incidents(100) if item["anomaly_id"] == selected["anomaly_id"]), None)
+        if matching:
+            c1, c2, c3 = st.columns([0.65, 1.05, 1.8])
+            c1.metric("Confidence", f"{float(matching['confidence']):.0%}")
+            c2.metric("Proposal", matching["proposed_action"])
+            c3.metric("Status", matching["status"])
+            st.markdown(f"**Context:** {matching['description']}")
+        decision = st.radio(
+            "Decision",
+            ["Approved", "Modified", "Rejected"],
+            horizontal=True,
+            key="review_decision",
+        ).lower()
+        with st.form("approval_form"):
+            modified_action = None
+            if decision == "modified":
+                modified_action = st.selectbox(
+                    "Replacement action",
+                    [
+                        "flag-for-audit",
+                        "escalate-to-manager",
+                        "escalate-to-HR",
+                        "no-action",
+                        "auto-correct",
+                    ],
+                )
+            note_label = "Rejection reason" if decision == "rejected" else "Reviewer note"
+            note_placeholder = (
+                "Explain why this proposal should not proceed"
+                if decision == "rejected"
+                else "Add context for this decision (optional)"
             )
-            st.json(anomaly.evidence)
+            reason = st.text_input(note_label, placeholder=note_placeholder)
+            save = st.form_submit_button("Submit decision", type="primary")
+        if save:
+            engine.record_feedback(selected["anomaly_id"], decision, modified_action, reason)
+            engine.record_outcome_feedback(
+                selected["anomaly_id"], "false_positive" if decision == "rejected" else "resolved",
+                false_positive=decision == "rejected", comment=reason,
+            )
+            st.success("Decision saved. The system will use this feedback in future cases.")
+            st.rerun()
     else:
-        st.info("Run a scheduled scan from the sidebar to populate proactive anomalies.")
+        st.info("No cases are waiting. Run a scan or inject the payroll alert to create review work.")
 
 with tabs[3]:
-    st.markdown("### Learning lab")
-    st.caption(
-        "Use the same anomaly twice to see the contextual bandit warm-start from memory and human feedback."
-    )
-    demo_anomaly = _default_learning_anomaly()
-    if st.button("Generate first occurrence", use_container_width=True, key="learning_first"):
-        st.session_state.learning_result = {
-            "first": engine.process_trigger("system", {"anomaly": demo_anomaly}, source="ui-demo"),
-            "second": None,
-            "anomaly": demo_anomaly,
-        }
-
-    learning_result = st.session_state.learning_result
-    if learning_result and learning_result.get("first"):
-        first = learning_result["first"]
-        first_anomaly = first.anomalies[0]
-        first_cols = st.columns(4)
-        first_cols[0].metric("First confidence", f"{first_anomaly.confidence:.3f}")
-        first_cols[1].metric("First action", first_anomaly.recommended_action)
-        first_cols[2].metric("Queued approvals", first.approvals_queued)
-        first_cols[3].metric(
-            "Reward",
-            first.diagnostics["cumulative_reward"][-1] if first.diagnostics["cumulative_reward"] else 0,
-        )
-        st.json(first_anomaly.evidence)
-
-        pending = engine.pending_approvals()
-        if pending:
-            selected = st.selectbox(
-                "Pending approval",
-                pending,
-                format_func=lambda item: f"{item['anomaly_id']} · {item['status']} · {item['reason']}",
-                key="learning_pending_selector",
-            )
-            decision = st.selectbox(
-                "Decision",
-                ["approved", "rejected", "modified"],
-                key="learning_decision",
-            )
-            chosen_action = st.selectbox(
-                "If modified, new action",
-                [
-                    "auto-correct",
-                    "escalate-to-manager",
-                    "escalate-to-HR",
-                    "flag-for-audit",
-                    "no-action",
-                ],
-                key="learning_action_choice",
-            )
-            if st.button("Record human feedback", use_container_width=True, key="learning_feedback"):
-                engine.record_feedback(
-                    selected["anomaly_id"],
-                    decision,
-                    chosen_action if decision == "modified" else None,
-                    comment="streamlit-feedback",
-                )
-                engine.record_outcome_feedback(
-                    selected["anomaly_id"],
-                    "resolved" if decision != "rejected" else "false_positive",
-                    false_positive=decision == "rejected",
-                    comment="streamlit-feedback",
-                )
-                st.success("Feedback stored and fed into the RL layer.")
-                learning_result = st.session_state.learning_result
-                learning_result["second"] = engine.process_trigger(
-                    "system",
-                    {"anomaly": {**learning_result["anomaly"], "anomaly_id": str(uuid.uuid4())}},
-                    source="ui-demo",
-                )
-                st.session_state.learning_result = learning_result
-                st.rerun()
-
-        if learning_result.get("second"):
-            second = learning_result["second"]
-            second_anomaly = second.anomalies[0]
-            comparison_cols = st.columns(4)
-            comparison_cols[0].metric("Second confidence", f"{second_anomaly.confidence:.3f}")
-            comparison_cols[1].metric("Second action", second_anomaly.recommended_action)
-            comparison_cols[2].metric("Actioned", second.actions_executed)
-            comparison_cols[3].metric(
-                "Confidence lift", f"{second_anomaly.confidence - first_anomaly.confidence:+.3f}"
-            )
-            st.line_chart(
-                {
-                    "first": first.diagnostics["cumulative_reward"],
-                    "second": second.diagnostics["cumulative_reward"],
-                }
-            )
-            st.caption(
-                "The second occurrence should show a higher confidence and a lower need for HITL after the reward update."
-            )
-
-    st.markdown("### Pending approvals inbox")
-    if pending_approvals:
-        st.dataframe(pending_approvals, use_container_width=True, hide_index=True)
+    st.markdown("### The policy changes when humans teach it")
+    learning = st.session_state.learning_result
+    if learning:
+        first, second = learning["first"], learning["second"]
+        a1, a2 = first.anomalies[0], second.anomalies[0]
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Before confidence", f"{a1.confidence:.0%}")
+        c2.metric("After confidence", f"{a2.confidence:.0%}")
+        c3.metric("Before", a1.status)
+        c4.metric("After", a2.status)
+        st.markdown("<div class='callout'><b>What changed?</b><br>The system remembered the approved resolution. When a similar case appeared again, it raised its confidence and handled the case with less manual review.</div>", unsafe_allow_html=True)
     else:
-        st.info("No pending approvals right now.")
-
-with tabs[4]:
-    st.markdown("### Observability and RL diagnostics")
-    cols = st.columns(4)
-    cols[0].metric("Cumulative reward steps", len(diagnostics.get("cumulative_reward", [])))
-    cols[1].metric("Action types", len(diagnostics.get("action_distribution", {})))
-    cols[2].metric("Human reward", diagnostics.get("reward_by_source", {}).get("human", 0.0))
-    cols[3].metric("Outcome reward", diagnostics.get("reward_by_source", {}).get("outcome", 0.0))
+        st.info("Use **Run two-cycle learning demo** in the sidebar for a before/after comparison.")
+    diagnostics = engine.rl_diagnostics()
     if diagnostics.get("cumulative_reward"):
-        charts = st.columns(2)
-        with charts[0]:
-            st.markdown("**Cumulative reward curve**")
-            st.line_chart(diagnostics["cumulative_reward"])
-        with charts[1]:
-            st.markdown("**Action distribution**")
-            st.bar_chart(diagnostics["action_distribution"])
-    st.markdown("**Reward by source**")
-    st.bar_chart(diagnostics.get("reward_by_source", {}))
-    st.markdown("**Recent RL experiences**")
-    st.dataframe(recent_experiences, use_container_width=True, hide_index=True)
-    st.markdown("**Recent incidents**")
-    st.dataframe(recent_incidents, use_container_width=True, hide_index=True)
+        left, right = st.columns(2)
+        with left:
+            st.markdown("#### Learning progress")
+            st.line_chart(
+                diagnostics["cumulative_reward"],
+                x_label="Feedback cycle",
+                y_label="Cumulative reward",
+                height=260,
+            )
+        with right:
+            st.markdown("#### Recommended actions")
+            st.bar_chart(diagnostics.get("action_distribution", {}), height=260)
+    st.markdown("#### Recent feedback history")
+    st.dataframe(engine.recent_experiences(), width="stretch", hide_index=True)

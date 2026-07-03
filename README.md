@@ -16,13 +16,14 @@ approval, and feedback outcome.
 - **Compliance agent:** deterministic hard vetoes that model confidence and feedback cannot
   override.
 - **HITL and learning:** SQLite approval queue plus a conservative contextual bandit that uses
-  reward-weighted human outcomes and compliance penalties to adjust proposals.
+  human approvals, rejection reasons, and outcome feedback to adjust proposals.
 - **Episodic vector memory:** dependency-free SQLite vector store using stable feature-hashed
   embeddings; stores incident context, action, outcome, and reward and retrieves similar cases.
 - **Conversation memory:** SQLite-backed messages, pending intent, and collected slots.
 - **Observability:** per-step agent/retrieval/LLM/tool trace with input, output, status, latency,
   tokens, reported OpenRouter cost, and an optimization comparison.
-- **Interfaces:** Streamlit chat UI with a live run trace and a CLI for automation.
+- **Interfaces:** Streamlit dashboard with chat, proactive scans, HITL inbox, RL learning lab,
+  live run trace, and a CLI for automation.
 
 All LLM inference uses OpenRouter's free `openai/gpt-oss-120b:free` model. All embeddings use
 `Qwen/Qwen3-Embedding-8B` through `sentence-transformers`.
@@ -46,7 +47,7 @@ LangGraph `supervisor_agent` + shared graph state
 The policy corpus is split at Markdown section headings. Oversized sections are windowed at
 220 words with a 35-word overlap. Heading text is embedded with each body chunk so short,
 topic-oriented questions retain strong semantic signals. Embeddings are normalized, persisted
-to `.runtime/policy_index.npz`, and rebuilt only when the corpus or embedding model changes.
+to `data/policy_index.npz`, and rebuilt only when the corpus or embedding model changes.
 
 ## Setup
 
@@ -64,7 +65,7 @@ cp .env.example .env
 Set `OPENROUTER_API_KEY` in `.env`, then run:
 
 ```bash
-streamlit run src/app.py
+streamlit run app.py
 ```
 
 Open the URL printed by Streamlit, normally `http://localhost:8501`.
@@ -103,9 +104,10 @@ rules live in `data/compliance_rules.json`, never in a prompt.
   always enter HITL regardless of confidence.
 
 Compliance vetoes receive reward `-1.0`, rejected proposals `-1.0`, modified proposals `+0.5`,
-approved proposals `+1.0`, and safe automated execution `+0.25`. Positive, semantically similar
-episodes can raise recurrence confidence by up to 0.12; negative/vetoed episodes suppress the
-same proposal. Compliance is evaluated after learning, so no learned policy can bypass a veto.
+approved proposals `+1.0`, safe automated execution `+0.05` to `+0.25` depending on the action,
+and outcome feedback rewards or penalizes recurrence and false positives. Positive, semantically
+similar episodes can raise recurrence confidence by up to 0.12; negative/vetoed episodes suppress
+the same proposal. Compliance is evaluated after learning, so no learned policy can bypass a veto.
 
 ## Evaluation and Loom diagnostics
 
@@ -199,8 +201,8 @@ business errors, transient retries, policy traces, no-LLM routing, and multi-tur
 
 ```text
 data/                      Supplied PDF and normalized policy corpus
+app.py                     Streamlit UI
 src/
-  app.py                   Streamlit UI
   agents/
     supervisor_agent.py      Trigger routing agent
     policy_agent.py          Grounded RAG agent

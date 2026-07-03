@@ -181,11 +181,7 @@ class SelfHealingWorkflow:
         actions = 0
         for anomaly, decision in zip(state["anomalies"], state["decisions"], strict=True):
             self.store.save_incident(anomaly)
-            needs_approval = (
-                not decision.allowed
-                or anomaly.confidence < self.auto_action_threshold
-                or anomaly.recommended_action != "auto-correct"
-            )
+            needs_approval = not decision.allowed or anomaly.confidence < self.auto_action_threshold
             if needs_approval:
                 anomaly.status = "pending-human-review"
                 self.store.save_incident(anomaly)
@@ -199,17 +195,44 @@ class SelfHealingWorkflow:
                     tool_calls=[{"name": "queue_approval", "anomaly_id": anomaly.anomaly_id}],
                 )
             else:
-                anomaly.status = "auto-corrected"
+                status_map = {
+                    "auto-correct": "auto-corrected",
+                    "escalate-to-manager": "auto-routed-to-manager",
+                    "escalate-to-HR": "auto-routed-to-hr",
+                    "flag-for-audit": "flagged-for-audit",
+                    "no-action": "closed-no-action",
+                }
+                tool_name_map = {
+                    "auto-correct": "auto_correct",
+                    "escalate-to-manager": "notify_manager",
+                    "escalate-to-HR": "escalate_to_hr",
+                    "flag-for-audit": "flag_for_audit",
+                    "no-action": "no_action",
+                }
+                anomaly.status = status_map.get(anomaly.recommended_action, "auto-processed")
                 self.store.save_incident(anomaly)
-                self.store.record_rl_experience(anomaly, 0.25, "safe-execution")
+                reward_map = {
+                    "auto-correct": 0.25,
+                    "escalate-to-manager": 0.18,
+                    "escalate-to-HR": 0.15,
+                    "flag-for-audit": 0.10,
+                    "no-action": 0.05,
+                }
+                reward = reward_map.get(anomaly.recommended_action, 0.1)
+                self.store.record_rl_experience(anomaly, reward, "safe-execution")
                 actions += 1
                 self._transition(
                     state,
                     "action_agent",
                     "guarded_action_executed",
                     rl_action=anomaly.recommended_action,
-                    reward=0.25,
-                    tool_calls=[{"name": "auto_correct", "anomaly_id": anomaly.anomaly_id}],
+                    reward=reward,
+                    tool_calls=[
+                        {
+                            "name": tool_name_map.get(anomaly.recommended_action, "auto_process"),
+                            "anomaly_id": anomaly.anomaly_id,
+                        }
+                    ],
                 )
         return {
             "anomalies": state["anomalies"],
@@ -259,3 +282,61 @@ class SelfHealingWorkflow:
             diagnostics,
             cost,
         )
+
+    def record_outcome_feedback(
+        self,
+        anomaly_id: str,
+        outcome: str,
+        *,
+        recurrence: bool = False,
+        false_positive: bool = False,
+        comment: str = "",
+    ) -> None:
+        anomaly, action, reward = self.store.record_outcome_feedback(
+            anomaly_id,
+            outcome,
+            recurrence=recurrence,
+            false_positive=false_positive,
+            comment=comment,
+        )
+        self.memory.add(anomaly, action, outcome, reward)
+
+    def simulate_learning_cycle(
+        self,
+        anomaly_payload: dict[str, Any] | None = None,
+        *,
+        feedback_decision: str = "approved",
+        outcome: str = "resolved",
+        recurrence: bool = False,
+    ) -> dict[str, Any]:
+        payload = anomaly_payload or {
+            "anomaly_id": str(uuid.uuid4()),
+            "employee_id": "E-DEMO",
+            "category": "leave",
+            "description": "Repeated Q1 leave threshold anomaly",
+            "confidence": 0.84,
+            "recommended_action": "auto-correct",
+            "evidence": {"leave_days": 18, "review_threshold": 15},
+            "risk": "low",
+        }
+        first = self.run(WorkflowTrigger(str(uuid.uuid4()), "system", {"anomaly": payload}))
+        queued = [anomaly for anomaly in first.anomalies if anomaly.status == "pending-human-review"]
+        if queued:
+            anomaly_id = queued[0].anomaly_id
+            anomaly, action, reward = self.store.record_feedback(anomaly_id, feedback_decision)
+            self.memory.add(anomaly, action, feedback_decision, reward)
+            self.record_outcome_feedback(
+                anomaly_id,
+                outcome,
+                recurrence=recurrence,
+                comment="learning-cycle-demo",
+            )
+        second_payload = dict(payload)
+        second_payload["anomaly_id"] = str(uuid.uuid4())
+        second = self.run(WorkflowTrigger(str(uuid.uuid4()), "system", {"anomaly": second_payload}))
+        return {
+            "first": first,
+            "second": second,
+            "diagnostics": self.store.rl_diagnostics(),
+            "pending_approvals": self.store.pending_approvals(),
+        }

@@ -139,8 +139,74 @@ class WorkflowEngine:
         )
         self.episodic_memory.add(anomaly, action, decision, reward)
 
+    def record_outcome_feedback(
+        self,
+        anomaly_id: str,
+        outcome: str,
+        *,
+        recurrence: bool = False,
+        false_positive: bool = False,
+        comment: str = "",
+    ) -> None:
+        anomaly, action, reward = self.state_store.record_outcome_feedback(
+            anomaly_id,
+            outcome,
+            recurrence=recurrence,
+            false_positive=false_positive,
+            comment=comment,
+        )
+        self.episodic_memory.add(anomaly, action, outcome, reward)
+
     def rl_diagnostics(self) -> dict:
         return self.state_store.rl_diagnostics()
+
+    def pending_approvals(self) -> list[dict[str, str]]:
+        return self.state_store.pending_approvals()
+
+    def recent_incidents(self, limit: int = 20) -> list[dict[str, str]]:
+        return self.state_store.recent_incidents(limit)
+
+    def recent_experiences(self, limit: int = 20) -> list[dict[str, str]]:
+        return self.state_store.recent_experiences(limit)
+
+    def simulate_learning_cycle(
+        self,
+        anomaly_payload: dict[str, Any] | None = None,
+        *,
+        feedback_decision: str = "approved",
+        outcome: str = "resolved",
+        recurrence: bool = False,
+    ) -> dict[str, Any]:
+        payload = anomaly_payload or {
+            "anomaly_id": str(uuid.uuid4()),
+            "employee_id": "E-DEMO",
+            "category": "leave",
+            "description": "Repeated Q1 leave threshold anomaly",
+            "confidence": 0.84,
+            "recommended_action": "auto-correct",
+            "evidence": {"leave_days": 18, "review_threshold": 15},
+            "risk": "low",
+        }
+        first = self.process_trigger("system", {"anomaly": payload}, source="rl-demo")
+        queued = self.pending_approvals()
+        if queued:
+            anomaly_id = queued[0]["anomaly_id"]
+            self.record_feedback(anomaly_id, feedback_decision)
+            self.record_outcome_feedback(
+                anomaly_id,
+                outcome,
+                recurrence=recurrence,
+                comment="learning-cycle-demo",
+            )
+        second_payload = dict(payload)
+        second_payload["anomaly_id"] = str(uuid.uuid4())
+        second = self.process_trigger("system", {"anomaly": second_payload}, source="rl-demo")
+        return {
+            "first": first,
+            "second": second,
+            "diagnostics": self.rl_diagnostics(),
+            "pending_approvals": self.pending_approvals(),
+        }
 
     def run(self, message: str, session_id: str | None = None) -> RunResult:
         session_id = session_id or str(uuid.uuid4())

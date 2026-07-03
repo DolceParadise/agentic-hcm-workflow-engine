@@ -85,6 +85,7 @@ class AnomalyDetectionAgent:
                 continue
             salaries = [member["salary"] for member in members]
             median = statistics.median(salaries)
+            mean = statistics.mean(salaries)
             mad = statistics.median(abs(value - median) for value in salaries)
             scale = max(1.4826 * mad, median * 0.03, 1.0)
             for member in members:
@@ -105,6 +106,7 @@ class AnomalyDetectionAgent:
                         risk="high",
                         evidence={
                             "salary": member["salary"],
+                            "cohort_mean": round(mean, 2),
                             "cohort_median": median,
                             "modified_z_score": round(z_score, 2),
                             "cohort": {"department": cohort[0], "experience_band": cohort[1]},

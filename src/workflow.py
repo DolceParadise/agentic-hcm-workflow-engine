@@ -320,9 +320,8 @@ class SelfHealingWorkflow:
             "risk": "low",
         }
         first = self.run(WorkflowTrigger(str(uuid.uuid4()), "system", {"anomaly": payload}))
-        queued = [anomaly for anomaly in first.anomalies if anomaly.status == "pending-human-review"]
-        if queued:
-            anomaly_id = queued[0].anomaly_id
+        if first.anomalies and first.anomalies[0].status == "pending-human-review":
+            anomaly_id = first.anomalies[0].anomaly_id
             anomaly, action, reward = self.store.record_feedback(anomaly_id, feedback_decision)
             self.memory.add(anomaly, action, feedback_decision, reward)
             self.record_outcome_feedback(

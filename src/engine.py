@@ -188,9 +188,8 @@ class WorkflowEngine:
             "risk": "low",
         }
         first = self.process_trigger("system", {"anomaly": payload}, source="rl-demo")
-        queued = self.pending_approvals()
-        if queued:
-            anomaly_id = queued[0]["anomaly_id"]
+        if first.anomalies and first.anomalies[0].status == "pending-human-review":
+            anomaly_id = first.anomalies[0].anomaly_id
             self.record_feedback(anomaly_id, feedback_decision)
             self.record_outcome_feedback(
                 anomaly_id,

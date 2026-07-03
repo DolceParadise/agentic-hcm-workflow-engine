@@ -117,6 +117,30 @@ def test_veto_is_a_negative_rl_experience(tmp_path):
     assert diagnostics["veto_count"] == 1
 
 
+def test_outcome_feedback_persists_as_rl_signal(tmp_path):
+    workflow, store, _ = _workflow(tmp_path)
+    alert = _leave_anomaly("leave-3", 0.84)
+
+    workflow.run(WorkflowTrigger("first", "system", {"anomaly": alert}))
+    store.record_feedback("leave-3", "approved")
+    workflow.record_outcome_feedback("leave-3", "resolved")
+
+    diagnostics = store.rl_diagnostics()
+    assert diagnostics["reward_by_source"]["human"] == 1.0
+    assert diagnostics["reward_by_source"]["outcome"] == 0.35
+    assert diagnostics["cumulative_reward"][-1] == 1.35
+
+
+def test_simulated_learning_cycle_shifts_confidence_after_feedback(tmp_path):
+    workflow, _, _ = _workflow(tmp_path)
+
+    demo = workflow.simulate_learning_cycle()
+
+    assert demo["first"].approvals_queued == 1
+    assert demo["second"].actions_executed == 1
+    assert demo["second"].anomalies[0].confidence > demo["first"].anomalies[0].confidence
+
+
 def test_episode_retrieval_returns_semantically_similar_incident(tmp_path):
     _, _, memory = _workflow(tmp_path)
     memory.add(Anomaly(**_leave_anomaly("leave-1")), "auto-correct", "approved", 1.0)

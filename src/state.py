@@ -61,6 +61,13 @@ class SQLiteStateStore:
                     proposed_action TEXT NOT NULL, decision TEXT NOT NULL, chosen_action TEXT,
                     comment TEXT NOT NULL DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 );
+                CREATE TABLE IF NOT EXISTS outcome_feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, anomaly_id TEXT NOT NULL,
+                    outcome TEXT NOT NULL, recurrence INTEGER NOT NULL DEFAULT 0,
+                    false_positive INTEGER NOT NULL DEFAULT 0,
+                    comment TEXT NOT NULL DEFAULT '', reward REAL NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                );
                 CREATE TABLE IF NOT EXISTS rl_experiences (
                     id INTEGER PRIMARY KEY AUTOINCREMENT, anomaly_id TEXT NOT NULL,
                     category TEXT NOT NULL, action TEXT NOT NULL, reward REAL NOT NULL,
@@ -222,6 +229,62 @@ class SQLiteStateStore:
             )
         return anomaly, action, reward
 
+    def record_outcome_feedback(
+        self,
+        anomaly_id: str,
+        outcome: str,
+        *,
+        recurrence: bool = False,
+        false_positive: bool = False,
+        comment: str = "",
+    ) -> tuple[Anomaly, str, float]:
+        if outcome not in {"resolved", "recurred", "false_positive", "validated"}:
+            raise ValueError("outcome must be resolved, recurred, false_positive, or validated")
+        with self._connect() as connection:
+            incident = connection.execute(
+                "SELECT * FROM incidents WHERE anomaly_id = ?",
+                (anomaly_id,),
+            ).fetchone()
+            if not incident:
+                raise ValueError(f"Unknown anomaly: {anomaly_id}")
+            reward = {
+                "resolved": 0.35,
+                "validated": 0.2,
+                "recurred": -0.8,
+                "false_positive": -0.6,
+            }[outcome]
+            if recurrence:
+                reward -= 0.1
+            if false_positive:
+                reward -= 0.15
+            connection.execute(
+                """INSERT INTO outcome_feedback
+                (anomaly_id, outcome, recurrence, false_positive, comment, reward)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                (anomaly_id, outcome, int(recurrence), int(false_positive), comment, reward),
+            )
+            connection.execute(
+                "UPDATE approvals SET status = ? WHERE anomaly_id = ?",
+                (outcome, anomaly_id),
+            )
+            connection.execute(
+                """INSERT INTO rl_experiences
+                (anomaly_id, category, action, reward, source, vetoed)
+                VALUES (?, ?, ?, ?, 'outcome', 0)""",
+                (anomaly_id, incident["category"], incident["proposed_action"], reward),
+            )
+            anomaly = Anomaly(
+                anomaly_id=incident["anomaly_id"],
+                employee_id=incident["employee_id"],
+                category=incident["category"],
+                description=incident["description"],
+                confidence=incident["confidence"],
+                recommended_action=incident["proposed_action"],
+                evidence=json.loads(incident["evidence_json"]),
+                status=incident["status"],
+            )
+        return anomaly, incident["proposed_action"], reward
+
     def record_rl_experience(
         self,
         anomaly: Anomaly,
@@ -245,20 +308,70 @@ class SQLiteStateStore:
                 ),
             )
 
+    def pending_approvals(self) -> list[dict[str, str]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT anomaly_id, reason, status, created_at
+                FROM approvals
+                WHERE status = 'pending'
+                ORDER BY created_at DESC
+                """
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def recent_incidents(self, limit: int = 20) -> list[dict[str, str]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT anomaly_id, employee_id, category, description, confidence,
+                       proposed_action, status, created_at
+                FROM incidents
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def recent_experiences(self, limit: int = 20) -> list[dict[str, str]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT anomaly_id, category, action, reward, source, vetoed, created_at
+                FROM rl_experiences
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def rl_diagnostics(self) -> dict:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT action, reward, vetoed FROM rl_experiences ORDER BY id"
+                "SELECT action, reward, source, vetoed FROM rl_experiences ORDER BY id"
             ).fetchall()
         cumulative = []
         total = 0.0
         distribution: dict[str, int] = {}
+        reward_by_source: dict[str, float] = {}
+        reward_by_action: dict[str, float] = {}
         for row in rows:
             total += float(row["reward"])
             cumulative.append(round(total, 3))
             distribution[row["action"]] = distribution.get(row["action"], 0) + 1
+            reward_by_source[row["source"]] = reward_by_source.get(row["source"], 0.0) + float(
+                row["reward"]
+            )
+            reward_by_action[row["action"]] = reward_by_action.get(row["action"], 0.0) + float(
+                row["reward"]
+            )
         return {
             "cumulative_reward": cumulative,
             "action_distribution": distribution,
+            "reward_by_source": {key: round(value, 3) for key, value in reward_by_source.items()},
+            "reward_by_action": {key: round(value, 3) for key, value in reward_by_action.items()},
+            "recent_experiences": [dict(row) for row in rows[-10:]],
             "veto_count": sum(int(row["vetoed"]) for row in rows),
         }

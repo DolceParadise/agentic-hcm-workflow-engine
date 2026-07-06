@@ -17,7 +17,6 @@ All LLM inference uses OpenRouter's free `openai/gpt-oss-120b:free` model. All e
 agentic-hcm-workflow-engine/
 ├── README.md                 Project guide, architecture, setup, and operating notes
 ├── app.py                    Streamlit UI for requests, scans, approvals, and learning
-├── DEMO_TRANSCRIPT.md        Recording-ready product walkthrough
 ├── pyproject.toml            Dependencies, CLI entry point, and tool configuration
 ├── docs/
 │   └── KEY_DESIGN_DECISIONS.md  Architecture and implementation rationale
